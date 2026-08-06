@@ -30,6 +30,8 @@ const OUTLINE_EXPANSION_STEPS_PER_ROUND = 6;
 const OUTLINE_EXPANSION_TARGET_RATIO = 0.8;
 const EARLY_CONTENT_PROBE_COUNT = 3;
 const MIN_SECTION_EXPANSION_INCREMENT = 800;
+const TARGET_WORD_TOLERANCE_RATIO = 1.05;
+const MAX_CONTENT_COMPACTION_ROUNDS = 2;
 const CONSISTENCY_AUDIT_GROUP_WORD_LIMIT = 300000;
 const CONSISTENCY_REPAIR_MAX_ATTEMPTS = 2;
 const ORIGINAL_PLAN_SEGMENT_MAX_CHARS = 6000;
@@ -370,6 +372,25 @@ function normalizeOriginalPlanCoverageRepairMode(value) {
 function normalizeMinimumWords(value) {
   const words = Number(value);
   return Math.max(0, Number.isFinite(words) ? Math.round(words) : 0);
+}
+
+function normalizeTargetWords(value) {
+  const words = Number(value);
+  return Math.max(0, Number.isFinite(words) ? Math.round(words) : 0);
+}
+
+function buildSectionTargetWordBudgets(leaves, targetWords) {
+  const budgets = new Map();
+  if (!targetWords || !leaves.length) return budgets;
+
+  const base = Math.floor(targetWords / leaves.length);
+  let remainder = targetWords - (base * leaves.length);
+  leaves.forEach(({ item }) => {
+    const budget = base + (remainder > 0 ? 1 : 0);
+    if (remainder > 0) remainder -= 1;
+    budgets.set(item.id, budget);
+  });
+  return budgets;
 }
 
 function normalizePositiveInteger(value, fallback) {
@@ -821,7 +842,7 @@ function formatKnowledgeContentsForPrompt(contents) {
     .join('\n\n');
 }
 
-function buildChapterContentMessages({ chapter, projectOverview, selectedFactsText, regenerateRequirement, contentPlan, knowledgeContents, preSectionInstruction }) {
+function buildChapterContentMessages({ chapter, projectOverview, selectedFactsText, regenerateRequirement, contentPlan, knowledgeContents, preSectionInstruction, targetWords }) {
   const chapterId = chapter.id || 'unknown';
   const chapterTitle = chapter.title || '未命名章节';
   const chapterDescription = chapter.description || '';
@@ -847,7 +868,7 @@ function buildChapterContentMessages({ chapter, projectOverview, selectedFactsTe
 13. 只有步骤、流程、时间顺序、操作顺序等连续性非常强的内容，才可以使用有序列表；其他分段一律使用自然段、无编号列表或无编号加粗引导语，禁止使用任何形式的编号。
 14. 直接返回章节内容，不生成标题，不要任何额外说明。
 15. 如果本章节需要使用的全局事实变量中包含相关内容，必须优先使用变量值，不得前后矛盾。
-16. 仅使用本章节提供的全局事实变量；未提供时不要主动编造具体人员、周期、质保、品牌、型号等会影响全文一致性的承诺。`,
+16. 仅使用本章节提供的全局事实变量；未提供时不要主动编造具体人员、周期、质保、品牌、型号等会影响全文一致性的承诺。${targetWords > 0 ? `\n17. 本小节目标约 ${targetWords} 字，包含自然段、列表和表格文字；字数应控制在 ${Math.max(1, Math.floor(targetWords * 0.8))}-${targetWords} 字，优先保留具体参数、实施步骤、职责、承诺和验收依据。` : ''}`,
     },
   ];
 
@@ -892,6 +913,7 @@ function buildChapterContentMessages({ chapter, projectOverview, selectedFactsTe
 章节ID: ${chapterId}
 章节标题: ${chapterTitle}
 章节描述: ${chapterDescription}
+${targetWords > 0 ? `本小节字数预算: 不超过 ${targetWords} 字\n` : ''}
 
 请结合项目概述信息、本章节全局事实变量、参考正文素材和正文编排决策，围绕当前章节标题、描述和写作重点生成详细的专业内容。
 直接返回编写的正文内容，不要输出标题、Markdown 标题、带任何形式编号的加粗引导语、伪目录标题、解释、总结等任何其他内容`,
@@ -900,7 +922,7 @@ function buildChapterContentMessages({ chapter, projectOverview, selectedFactsTe
   return messages;
 }
 
-function buildRestoredChapterContentMessages({ chapter, projectOverview, selectedFactsText, regenerateRequirement, contentPlan, knowledgeContents, restoredContent }) {
+function buildRestoredChapterContentMessages({ chapter, projectOverview, selectedFactsText, regenerateRequirement, contentPlan, knowledgeContents, restoredContent, targetWords }) {
   const messages = buildChapterContentMessages({
     chapter,
     projectOverview,
@@ -908,6 +930,7 @@ function buildRestoredChapterContentMessages({ chapter, projectOverview, selecte
     regenerateRequirement,
     contentPlan,
     knowledgeContents,
+    targetWords,
     preSectionInstruction: `当前章节已经从用户原方案中还原出正文底稿。该底稿是用户已经写好的真实技术方案内容，必须作为本章节的基础保留。
 
 处理要求：
@@ -1120,7 +1143,7 @@ workspace 文件：
 最终请把当前小节完整正文写入 optimized-section.md。该文件只能包含正文内容，不要包含标题或说明。`;
 }
 
-function buildAgentRestoredChapterContentFiles({ chapter, projectOverview, selectedFactsText, regenerateRequirement, contentPlan, knowledgeContents, restoredContent }) {
+function buildAgentRestoredChapterContentFiles({ chapter, projectOverview, selectedFactsText, regenerateRequirement, contentPlan, knowledgeContents, restoredContent, targetWords }) {
   return [
     {
       path: 'chapter-context.md',
@@ -1139,6 +1162,9 @@ ${String(selectedFactsText || '').trim() || '未提供'}
 
 # 用户对本次重新生成的额外要求
 ${String(regenerateRequirement || '').trim() || '无'}
+
+# 本小节字数预算
+${targetWords > 0 ? `不超过 ${targetWords} 字。优先保留具体参数、实施步骤、职责、承诺和验收依据。` : '不限制'}
 
 # 正文编排决策
 ${contentPlan ? formatContentPlanForPrompt(contentPlan) : '无'}`,
@@ -1558,6 +1584,36 @@ function buildContentExpansionRepairMessages({ invalidContent, issues }, current
     { role: 'user', content: `错误列表：\n${issueLines}` },
     ...currentContentBlock,
     { role: 'user', content: `待修复内容：\n\`\`\`json\n${String(invalidContent || '').slice(0, 60000)}\n\`\`\`` },
+  ];
+}
+
+function buildContentCompactionMessages({ context, currentContent, currentWords, targetWords, selectedFactsText, tableAllowed }) {
+  const { item, parentChapters, siblingChapters } = context;
+  const chapterPath = [...(parentChapters || []), item]
+    .map((chapter) => `${chapter.id || 'unknown'} ${chapter.title || '未命名章节'}`)
+    .join(' > ');
+  const siblingLines = (siblingChapters || [])
+    .filter((chapter) => chapter.id !== item.id)
+    .map((chapter) => `- ${chapter.id || 'unknown'} ${chapter.title || '未命名章节'}：${chapter.description || ''}`)
+    .join('\n');
+
+  return [
+    {
+      role: 'system',
+      content: `你是投标技术方案篇幅压缩专家。请在不丢失实质响应内容的前提下压缩当前小节。
+
+要求：
+1. 完整保留金额、数量、时间、人员、参数、接口范围、实施步骤、质量措施、安全要求、服务承诺、交付物和验收依据。
+2. 删除背景性铺陈、重复原则、重复流程、空泛保障、同义反复和与其他小节重复的内容。
+3. 不得新增原文没有的事实、参数或承诺，不得改变原意。
+4. 可以合并短段落、列表和重复表格行；${tableAllowed ? '仍需保留有明确对比、参数或职责价值的 Markdown 表格。' : '不得输出 Markdown 或 HTML 表格。'}
+5. 严禁输出 Markdown 标题、章节标题、图片、Mermaid、代码块、解释或压缩说明。
+6. 直接返回压缩后的完整小节正文，字数不得超过 ${targetWords} 字。`,
+    },
+    { role: 'user', content: `当前章节路径：${chapterPath}\n章节描述：${item.description || '无'}` },
+    { role: 'user', content: `同级章节（用于识别并删除重复内容）：\n${siblingLines || '无'}` },
+    ...(String(selectedFactsText || '').trim() ? [{ role: 'user', content: `必须保持一致的全局事实变量：\n${selectedFactsText}` }] : []),
+    { role: 'user', content: `当前正文约 ${currentWords} 字，请压缩到不超过 ${targetWords} 字：\n\n${currentContent}` },
   ];
 }
 
@@ -2989,11 +3045,14 @@ async function runContentGenerationTask({ aiService, agentService, workspaceStor
   let contentRuntime = normalizeContentGenerationRuntime(resume ? storedPlan.contentGenerationRuntime : {});
   const retryContentCorrection = !resume && Boolean(payload.retryContentCorrection ?? payload.retry_content_correction);
   const rerunIllustrations = !resume && Boolean(payload.rerunIllustrations ?? payload.rerun_illustrations);
+  const previousContentPhase = previousState?.contentGenerationTask?.stats?.content?.phase;
+  const runOnlyCompactionStage = (resume && contentRuntime.phase === 'compacting')
+    || (retryContentCorrection && previousContentPhase === 'compacting');
   const runOnlyIllustrationPlanning = rerunIllustrations
     || (resume && contentRuntime.phase === 'illustration-planning')
-    || (retryContentCorrection && previousState?.contentGenerationTask?.stats?.content?.phase === 'illustration-planning');
+    || (retryContentCorrection && previousContentPhase === 'illustration-planning');
   const runOnlyIllustrationGeneration = (resume && contentRuntime.phase === 'illustration-generating')
-    || (retryContentCorrection && previousState?.contentGenerationTask?.stats?.content?.phase === 'illustration-generating');
+    || (retryContentCorrection && previousContentPhase === 'illustration-generating');
   const runOnlyIllustrationStage = runOnlyIllustrationPlanning || runOnlyIllustrationGeneration;
   const regenerate = !resume && !retryContentCorrection && !rerunIllustrations && Boolean(payload.regenerate);
   const targetItemId = resume ? contentRuntime.target_item_id : String(payload.targetItemId || '').trim();
@@ -3019,6 +3078,8 @@ async function runContentGenerationTask({ aiService, agentService, workspaceStor
   const tableRequirement = normalizeTableRequirement(generationOptions.tableRequirement ?? generationOptions.table_requirement);
   let maxTables = maxTablesForRequirement(tableRequirement, leaves.length);
   const minimumWords = targetItemId ? 0 : normalizeMinimumWords(generationOptions.minimumWords ?? generationOptions.minimum_words);
+  const targetWords = normalizeTargetWords(generationOptions.targetWords ?? generationOptions.target_words);
+  const sectionTargetWordBudgets = buildSectionTargetWordBudgets(leaves, targetWords);
   const referenceKnowledgeDocumentIds = normalizeReferenceDocumentIds(storedPlan);
   const enableConsistencyAudit = Boolean(generationOptions.enableConsistencyAudit ?? generationOptions.enable_consistency_audit ?? true);
   const requestedConsistencyRepairMode = normalizeConsistencyRepairMode(generationOptions.consistencyRepairMode ?? generationOptions.consistency_repair_mode);
@@ -3042,7 +3103,11 @@ async function runContentGenerationTask({ aiService, agentService, workspaceStor
     outline_expansion_round_total: MAX_OUTLINE_EXPANSION_ROUNDS,
     outline_expansion_step_label: '',
     minimum_words: minimumWords,
+    target_words: targetWords,
     current_words: 0,
+    compaction_total: 0,
+    compaction_completed: 0,
+    compaction_failed: 0,
     audit_group_total: 0,
     audit_group_completed: 0,
     audit_conflict_total: 0,
@@ -3170,6 +3235,9 @@ async function runContentGenerationTask({ aiService, agentService, workspaceStor
       : `表格需求：${TABLE_REQUIREMENT_LABELS[tableRequirement]}，全文最多 ${maxTables} 个表格，本轮最多新增 ${runLimits.maxTablesForRun} 个。`];
   if (minimumWords > 0) {
     logs = [...logs, `最低字数已启用：${minimumWords} 字，将在采样预估后补目录，并在正文生成后扩写补足。`];
+  }
+  if (targetWords > 0) {
+    logs = [...logs, `目标字数已启用：${targetWords} 字，已按 ${leaves.length} 个小节分配生成预算，完成后将检查并压缩超限内容。`];
   }
   logs = [...logs, enableConsistencyAudit
     ? `全文一致性审计已启用，正文扩写完成后将使用${consistencyRepairMode === 'agent' ? ' Agent 修复' : '普通修复'}检查并修复事实冲突。`
@@ -3379,6 +3447,7 @@ async function runContentGenerationTask({ aiService, agentService, workspaceStor
     contentStats.generation_completed = leaves.filter(({ item }) => ['success', 'error'].includes(sections[item.id]?.status)).length;
     contentStats.current_words = countTotalContentWords();
     contentStats.minimum_words = minimumWords;
+    contentStats.target_words = targetWords;
     return { content: { ...contentStats } };
   }
 
@@ -4017,6 +4086,7 @@ async function runContentGenerationTask({ aiService, agentService, workspaceStor
 
   async function runOne(context) {
     const { item } = context;
+    const sectionTargetWords = sectionTargetWordBudgets.get(item.id) || 0;
     const previousSection = sections[item.id] || {};
     const previousContent = previousSection.content || item.content || '';
     const previousStatus = previousSection.status && previousSection.status !== 'running'
@@ -4045,8 +4115,8 @@ async function runContentGenerationTask({ aiService, agentService, workspaceStor
       const knowledgeContents = resolveKnowledgeContents(contentPlan.knowledge?.item_ids, knowledgeContentMap);
       const selectedFactsText = resolveSelectedFactsText(contentPlan, globalFacts);
       const contentMessages = needsRestoredOptimization
-        ? buildRestoredChapterContentMessages({ chapter: item, projectOverview, selectedFactsText, regenerateRequirement, contentPlan, knowledgeContents, restoredContent: previousContent })
-        : buildChapterContentMessages({ chapter: item, projectOverview, selectedFactsText, regenerateRequirement, contentPlan, knowledgeContents });
+        ? buildRestoredChapterContentMessages({ chapter: item, projectOverview, selectedFactsText, regenerateRequirement, contentPlan, knowledgeContents, restoredContent: previousContent, targetWords: sectionTargetWords })
+        : buildChapterContentMessages({ chapter: item, projectOverview, selectedFactsText, regenerateRequirement, contentPlan, knowledgeContents, targetWords: sectionTargetWords });
 
       let generatedContent;
       if (needsRestoredOptimization && shouldUseAgentForMessages(aiService, contentMessages)) {
@@ -4075,6 +4145,7 @@ async function runContentGenerationTask({ aiService, agentService, workspaceStor
             contentPlan,
             knowledgeContents,
             restoredContent: previousContent,
+            targetWords: sectionTargetWords,
           }),
           eventPrefix: 'restored_optimization.agent',
           activityLabel: 'Agent 正在优化扩写已还原正文',
@@ -4103,8 +4174,8 @@ async function runContentGenerationTask({ aiService, agentService, workspaceStor
 
       content = stripRepeatedChapterTitle(normalizeGeneratedMarkdown(rawContent), item);
       logs = [...logs, needsRestoredOptimization
-        ? `原方案优化扩写完成：${item.id} ${item.title || '未命名章节'}`
-        : `生成完成：${item.id} ${item.title || '未命名章节'}`];
+        ? `原方案优化扩写完成：${item.id} ${item.title || '未命名章节'}（${countContentWords(content)} 字${sectionTargetWords ? ` / 预算 ${sectionTargetWords} 字` : ''}）`
+        : `生成完成：${item.id} ${item.title || '未命名章节'}（${countContentWords(content)} 字${sectionTargetWords ? ` / 预算 ${sectionTargetWords} 字` : ''}）`];
       rememberTouchedItem(item.id);
       if (needsRestoredOptimization) {
         saveSectionAndContentPlan(item, { status: 'success', content, error: undefined }, content, {
@@ -4706,6 +4777,116 @@ async function runContentGenerationTask({ aiService, agentService, workspaceStor
     }
 
     logs = [...logs, `最低字数已达成：${currentWords}/${minimumWords} 字，准备进入后续阶段。`];
+    updateTask({ status: 'running', progress: progressFor(leaves, sections), logs, stats: statsSnapshot() }, workspaceStore.loadTechnicalPlan());
+  }
+
+  async function compactOneSection({ context, words, target }) {
+    const { item } = context;
+    const currentContent = getLeafContentForWords(item);
+    const storedContentPlan = getReusableStoredContentPlan(item.id);
+    const contentPlan = contentPlans.get(item.id) || storedContentPlan?.plan || normalizeContentPlan({}, allowedKnowledgeItemIds, allowedFactTitles);
+    const selectedFactsText = resolveSelectedFactsText(contentPlan, globalFacts);
+    logs = [...logs, `开始压缩：${item.id} ${item.title || '未命名章节'}（${words} -> 不超过 ${target} 字）。`];
+    updateTask({ status: 'running', progress: progressFor(leaves, sections), logs, stats: statsSnapshot() }, workspaceStore.loadTechnicalPlan());
+
+    try {
+      const generatedContent = await aiService.chat({
+        messages: buildContentCompactionMessages({
+          context,
+          currentContent,
+          currentWords: words,
+          targetWords: target,
+          selectedFactsText,
+          tableAllowed: Boolean(contentPlan?.table?.needed),
+        }),
+        temperature: 0.2,
+        logTitle: `正文压缩-${item.id}-${item.title || '未命名章节'}`,
+      });
+      pauseIfRequested('正文生成已在篇幅压缩回写前暂停，本轮输出未回写；继续后将重新执行。');
+      const nextContent = normalizeLeafContentForSave(generatedContent, item);
+      const nextWords = countContentWords(nextContent);
+      if (!nextContent.trim()) {
+        throw new Error('模型未返回可用正文');
+      }
+      if (nextWords >= words) {
+        throw new Error(`压缩后字数未减少（${words} -> ${nextWords}）`);
+      }
+      rememberTouchedItem(item.id);
+      saveSection(item, { status: 'success', content: nextContent, error: undefined }, nextContent, { logs });
+      logs = [...logs, `压缩完成：${item.id} ${item.title || '未命名章节'}（${words} -> ${nextWords} 字）。`];
+    } catch (error) {
+      if (isPauseLikeError(error)) throw error;
+      contentStats.compaction_failed += 1;
+      logs = [...logs, `压缩跳过：${item.id} ${item.title || '未命名章节'}，${error.message || '模型返回无效'}。`];
+    }
+    contentStats.compaction_completed += 1;
+    updateTask({ status: 'running', progress: progressFor(leaves, sections), logs, stats: statsSnapshot() }, workspaceStore.loadTechnicalPlan());
+  }
+
+  async function ensureTargetWords() {
+    if (targetWords <= 0 || targetItemId || isExpansionWorkflow) {
+      return;
+    }
+
+    let currentWords = countTotalContentWords();
+    const allowedWords = Math.ceil(targetWords * TARGET_WORD_TOLERANCE_RATIO);
+    logs = [...logs, `目标字数检查：当前 ${currentWords} 字，目标 ${targetWords} 字，允许偏差上限 ${allowedWords} 字。`];
+    updateTask({ status: 'running', progress: progressFor(leaves, sections), logs, stats: statsSnapshot() }, workspaceStore.loadTechnicalPlan());
+    if (currentWords <= allowedWords) {
+      logs = [...logs, '当前正文已在目标字数允许范围内。'];
+      return;
+    }
+
+    contentStats.phase = 'compacting';
+    contentStats.compaction_total = 0;
+    contentStats.compaction_completed = 0;
+    contentStats.compaction_failed = 0;
+    const strippedDocument = stripGeneratedIllustrationsFromDocument(outlineData, sections);
+    outlineData = strippedDocument.outlineData;
+    sections = strippedDocument.sections;
+    workspaceStore.clearIllustrationFiles?.();
+    workspaceStore.updateTechnicalPlan({
+      outlineData,
+      contentGenerationSections: sections,
+      contentIllustrationPlan: undefined,
+      contentGenerationRuntime: syncRuntime({ phase: 'compacting' }),
+    });
+
+    for (let round = 1; round <= MAX_CONTENT_COMPACTION_ROUNDS && currentWords > allowedWords; round += 1) {
+      const ratio = targetWords / currentWords;
+      const targets = leafWordStats()
+        .filter(({ item, words }) => sections[item.id]?.status === 'success' && words > 0)
+        .map((context) => ({
+          context,
+          words: context.words,
+          target: Math.max(1, Math.floor(context.words * ratio)),
+        }))
+        .filter(({ words, target }) => words > Math.ceil(target * TARGET_WORD_TOLERANCE_RATIO));
+
+      if (!targets.length) {
+        logs = [...logs, `第 ${round} 轮未找到可压缩小节，停止目标字数处理。`];
+        break;
+      }
+
+      contentStats.compaction_total += targets.length;
+      logs = [...logs, `开始第 ${round}/${MAX_CONTENT_COMPACTION_ROUNDS} 轮篇幅压缩，待处理 ${targets.length} 个小节。`];
+      updateTask({ status: 'running', progress: progressFor(leaves, sections), logs, stats: statsSnapshot() }, workspaceStore.loadTechnicalPlan());
+      await runItemsWithWorkerPool(targets, contentConcurrency, compactOneSection, isPauseRequested);
+      pauseIfRequested('正文生成已在篇幅压缩阶段暂停，可导出当前已完成内容，稍后继续。');
+      currentWords = countTotalContentWords();
+      logs = [...logs, `第 ${round} 轮篇幅压缩完成，当前全文 ${currentWords}/${targetWords} 字。`];
+      workspaceStore.updateTechnicalPlan({
+        outlineData,
+        contentGenerationSections: sections,
+        contentGenerationRuntime: syncRuntime({ phase: 'compacting' }),
+      });
+    }
+
+    if (currentWords > allowedWords) {
+      logs = [...logs, `篇幅压缩已完成，当前 ${currentWords} 字，仍高于目标允许上限 ${allowedWords} 字；已保留无法安全压缩的内容。`];
+    } else {
+      logs = [...logs, `目标字数已达成：${currentWords}/${targetWords} 字。`];
+    }
     updateTask({ status: 'running', progress: progressFor(leaves, sections), logs, stats: statsSnapshot() }, workspaceStore.loadTechnicalPlan());
   }
 
@@ -6393,7 +6574,7 @@ workspace 文件说明：
   }
 
   try {
-    if (!runOnlyIllustrationStage && tasksToRun.length) {
+    if (!runOnlyIllustrationStage && !runOnlyCompactionStage && tasksToRun.length) {
       if (targetItemId) {
         await prepareSingleSectionPlan();
         pauseIfRequested('正文生成已在正文编排后暂停，可导出当前已完成内容，稍后继续。');
@@ -6414,7 +6595,7 @@ workspace 文件说明：
       }
     }
 
-    if (!runOnlyIllustrationStage && !targetItemId) {
+    if (!runOnlyIllustrationStage && !runOnlyCompactionStage && !targetItemId) {
       if (retryContentCorrection) {
         logs = [...logs, '本次为内容矫正重试，跳过正文生成和最低字数扩写，直接进入内容矫正阶段。'];
         updateTask({ status: 'running', progress: progressFor(leaves, sections), logs, stats: statsSnapshot() }, workspaceStore.loadTechnicalPlan());
@@ -6435,12 +6616,15 @@ workspace 文件说明：
       }
       await removeTablesBeforeIllustration();
       pauseIfRequested('正文生成已在去表格阶段暂停，可导出当前已完成内容，稍后继续。');
-    } else if (!runOnlyIllustrationStage) {
+    } else if (!runOnlyIllustrationStage && !runOnlyCompactionStage) {
       await runOriginalPlanCoverageAuditIfEnabled({ targetItemId });
       pauseIfRequested('正文生成已在原方案覆盖审计后暂停，可导出当前已完成内容，稍后继续。');
       await runConsistencyAuditIfEnabled({ targetItemId });
       await removeTablesBeforeIllustration({ targetItemId });
       pauseIfRequested('正文生成已在去表格阶段暂停，可导出当前已完成内容，稍后继续。');
+    } else if (runOnlyCompactionStage) {
+      logs = [...logs, '继续篇幅压缩，跳过已完成的正文生成和内容矫正阶段。'];
+      updateTask({ status: 'running', progress: progressFor(leaves, sections), logs, stats: statsSnapshot() }, workspaceStore.loadTechnicalPlan());
     } else if (runOnlyIllustrationPlanning) {
       logs = [...logs, rerunIllustrations
         ? '开始仅重新配图：清除旧配图后，重新执行全文图片编排和生成阶段。'
@@ -6449,6 +6633,11 @@ workspace 文件说明：
     } else {
       logs = [...logs, '继续图片生成，跳过已完成的正文生成、内容矫正和图片编排阶段。'];
       updateTask({ status: 'running', progress: progressFor(leaves, sections), logs, stats: statsSnapshot() }, workspaceStore.loadTechnicalPlan());
+    }
+
+    if (!runOnlyIllustrationStage && !targetItemId) {
+      await ensureTargetWords();
+      pauseIfRequested('正文生成已在目标字数检查后暂停，可导出当前已完成内容，稍后继续。');
     }
 
     let illustrationPlan = runOnlyIllustrationGeneration ? storedPlan.contentIllustrationPlan : null;

@@ -31,6 +31,7 @@ export interface ContentGenerationOptions {
   htmlImageTypes: string;
   tableRequirement: ContentTableRequirement;
   minimumWords: number;
+  targetWords: number;
   enableConsistencyAudit: boolean;
   consistencyRepairMode: ConsistencyRepairMode;
   enableOriginalPlanCoverageAudit: boolean;
@@ -48,7 +49,7 @@ export interface BackgroundTaskState {
   error?: string;
   stats?: {
     content?: {
-      phase: 'planning' | 'restoring' | 'generating' | 'outline-expanding' | 'expanding' | 'original-auditing' | 'auditing' | 'table-cleaning' | 'illustration-planning' | 'illustration-generating' | 'done';
+      phase: 'planning' | 'restoring' | 'generating' | 'outline-expanding' | 'expanding' | 'original-auditing' | 'auditing' | 'table-cleaning' | 'compacting' | 'illustration-planning' | 'illustration-generating' | 'done';
       planning_total: number;
       planning_completed: number;
       generation_total: number;
@@ -61,7 +62,11 @@ export interface BackgroundTaskState {
       outline_expansion_round_total?: number;
       outline_expansion_step_label?: string;
       minimum_words?: number;
+      target_words?: number;
       current_words?: number;
+      compaction_total?: number;
+      compaction_completed?: number;
+      compaction_failed?: number;
       audit_group_total?: number;
       audit_group_completed?: number;
       audit_conflict_total?: number;

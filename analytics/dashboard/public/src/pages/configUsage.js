@@ -51,6 +51,7 @@ const configUsageGroups = [
   ['outlineModes', 'Step 03 目录模式'],
   ['tableRequirements', '正文表格需求'],
   ['minimumWords', '最低字数'],
+  ['targetWords', '目标字数'],
   ['contentConcurrencies', '正文生成并发速度'],
     ['contentGenerationActions', '正文生成动作'],
     ['enableConsistencyAudit', '全文一致性审计'],

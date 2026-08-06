@@ -29,6 +29,7 @@ export const CONFIG_USAGE_FIELDS = [
   { key: 'outlineModes' },
   { key: 'tableRequirements' },
   { key: 'minimumWords' },
+  { key: 'targetWords' },
   { key: 'contentConcurrencies' },
   { key: 'contentGenerationActions' },
   { key: 'enableConsistencyAudit' },
