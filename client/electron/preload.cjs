@@ -89,6 +89,10 @@ const bridge = {
     getUsage: () => ipcRenderer.invoke('storage:get-usage'),
     clean: (groupId) => ipcRenderer.invoke('storage:clean', groupId),
   },
+  agentDiagnostics: {
+    list: () => ipcRenderer.invoke('agent-diagnostics:list'),
+    exportReport: (name) => ipcRenderer.invoke('agent-diagnostics:export', name),
+  },
   license: {
     getStatus: () => ipcRenderer.invoke('license:get-status'),
     refresh: () => ipcRenderer.invoke('license:refresh'),

@@ -1,17 +1,17 @@
 {
   "name": "yibiao-client",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "易标投标工具箱独立桌面客户端",
+  "description": "微品致远投标工作台（公司内部版，基于 OpenBidKit_Yibiao）",
   "author": "mark",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n vite,electron -c blue,magenta \"vite --host 127.0.0.1 --port 5173 --strictPort\" \"wait-on http://127.0.0.1:5173 && cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron .\"",
     "build": "tsc --noEmit && vite build",
-    "dist": "npm run build && node scripts/prepare-openxml-helper.cjs && node scripts/prepare-diagnosis-source.cjs && electron-builder",
-    "dist:win": "npm run build && node scripts/prepare-openxml-helper.cjs --platform win32 --arch x64 && node scripts/prepare-diagnosis-source.cjs && electron-builder --win",
-    "dist:mac": "npm run build && node scripts/prepare-openxml-helper.cjs --platform darwin --arch all && node scripts/prepare-diagnosis-source.cjs && electron-builder --mac",
+    "dist": "npm run build && npm run generate-build-attestation && node scripts/prepare-openxml-helper.cjs && node scripts/prepare-diagnosis-source.cjs && electron-builder",
+    "dist:win": "npm run build && npm run generate-build-attestation && node scripts/prepare-openxml-helper.cjs --platform win32 --arch x64 && node scripts/prepare-diagnosis-source.cjs && electron-builder --win",
+    "dist:mac": "npm run build && npm run generate-build-attestation && node scripts/prepare-openxml-helper.cjs --platform darwin --arch all && node scripts/prepare-diagnosis-source.cjs && electron-builder --mac",
     "postinstall": "patch-package --error-on-fail --error-on-warn && electron-builder install-app-deps",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "generate-build-attestation": "node scripts/generate-build-attestation.cjs",
@@ -23,10 +23,11 @@
     "start": "electron ."
   },
   "build": {
-    "appId": "com.yibiao.openbidkit",
-    "productName": "易标投标工具箱",
+    "appId": "com.weipin.bidworkbench",
+    "productName": "微品致远投标工作台",
     "copyright": "Copyright © 2026 mark",
     "asar": true,
+    "beforePack": "scripts/check-openxml-before-pack.cjs",
     "directories": {
       "output": "release"
     },
@@ -36,16 +37,9 @@
       "assets/**/*",
       "package.json"
     ],
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "FB208",
-        "repo": "OpenBidKit_Yibiao",
-        "releaseType": "release"
-      }
-    ],
+    "publish": null,
     "win": {
-      "icon": "assets/icon.ico",
+      "icon": "assets/company-app.ico",
       "extraResources": [
         {
           "from": "vendor/agent-tools/win32-${arch}",
@@ -164,7 +158,7 @@
         }
       ]
     },
-    "artifactName": "Yibiao-${version}-${os}-${arch}.${ext}"
+    "artifactName": "WeiPinBid-${version}-20261118-${os}-${arch}.${ext}"
   },
   "dependencies": {
     "@docx-editor.dev/core": "2.15.0",

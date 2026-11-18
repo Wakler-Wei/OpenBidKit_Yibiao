@@ -1,5 +1,5 @@
 import type { AppMenuItem, SectionId } from '../shared/types/navigation';
-import { githubStarNotice } from '../shared/ui/useNoticeToast';
+import { featureUnavailableNotice } from '../shared/ui/useNoticeToast';
 
 export const appMenuItems: AppMenuItem[] = [
   {
@@ -49,7 +49,7 @@ export const appMenuItems: AppMenuItem[] = [
         label: '图片知识库',
         description: '管理图片素材、图示和视觉参考资料',
         icon: 'file',
-        notice: githubStarNotice,
+        notice: featureUnavailableNotice,
       },
     ],
   },
@@ -81,7 +81,7 @@ export const appMenuItems: AppMenuItem[] = [
         label: 'AI评标',
         description: '模拟AI评标，对标书进行打分，出具评标报告',
         icon: 'tool',
-        notice: githubStarNotice,
+        notice: featureUnavailableNotice,
       },
     ],
   },

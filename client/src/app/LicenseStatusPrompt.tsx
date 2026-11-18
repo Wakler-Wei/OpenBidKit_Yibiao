@@ -3,10 +3,9 @@ import { useEffect, useState } from 'react';
 import { OfflineLicenseActivationDialog } from '../shared/ui';
 import type { LicenseRuntimeStatus } from '../shared/types';
 
-const officialDownloadUrl = 'https://github.com/FB208/OpenBidKit_Yibiao';
-
 function getLicenseProblem(status: LicenseRuntimeStatus | null) {
   if (!status) return '';
+  if (status.activationMode === 'internal_distribution') return '';
   if (status.status === 'expired') return '授权已过期';
   if (status.status === 'missing' || status.status === 'refresh_failed') return '未检测到授权文件';
   if (status.status === 'invalid' || status.status === 'invalidated' || status.status === 'machine_mismatch') return '授权已失效';
@@ -72,8 +71,7 @@ function LicenseStatusPrompt() {
         <Dialog.Content className="license-status-card" onEscapeKeyDown={(event) => !dismissible && event.preventDefault()} onPointerDownOutside={(event) => !dismissible && event.preventDefault()}>
           <Dialog.Title>客户端授权提醒</Dialog.Title>
           <Dialog.Description>
-            当前客户端{problem}，请从官方渠道下载可信客户端：
-            <a href={officialDownloadUrl} target="_blank" rel="noreferrer">{officialDownloadUrl}</a>
+            当前客户端{problem}，请联系内部管理员核实安装包来源和发行配置。
           </Dialog.Description>
           <div className="license-status-actions">
             <button type="button" className="secondary-action" onClick={() => setOfflineLicenseDialogOpen(true)}>离线激活授权</button>

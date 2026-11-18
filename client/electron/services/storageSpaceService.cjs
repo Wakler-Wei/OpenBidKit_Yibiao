@@ -259,8 +259,8 @@ function createStorageSpaceService({ app, db, taskService, agentService, openXml
     },
     {
       id: 'developer-logs',
-      label: '其他开发日志',
-      description: '开发者模式下各功能模块的运行日志',
+      label: '其他日志与失败诊断包',
+      description: '各功能运行日志及本机保留的 Agent 失败诊断包；需要排障时请先导出',
       collect: async () => (await listChildren(logsDir)).filter((entryPath) => normalizePathKey(entryPath) !== normalizePathKey(getAiLogsDir(app))),
     },
     {

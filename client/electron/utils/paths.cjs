@@ -175,6 +175,10 @@ function getAgentRuntimeDir(app) {
   return path.join(getUserDataPath(app), 'agent-runtime');
 }
 
+function getAgentErrorReportsDir(app) {
+  return path.join(getUserDataPath(app), 'logs', 'agent-failures');
+}
+
 function getPlatformArchKey() {
   return `${process.platform}-${process.arch}`;
 }
@@ -255,6 +259,7 @@ function getTechnicalPlanExportFailureDir(app, failureId = '') {
 }
 
 module.exports = {
+  getAgentErrorReportsDir,
   getTechnicalPlanExportFailureDir,
   getAgentRuntimeDir,
   getAiLogsDir,

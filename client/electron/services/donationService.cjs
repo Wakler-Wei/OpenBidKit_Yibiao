@@ -3,6 +3,7 @@ const path = require('node:path');
 const { performance } = require('node:perf_hooks');
 const { safeStorage } = require('electron');
 const { getDonationStateFilePath } = require('../utils/paths.cjs');
+const product = require('../../assets/product.json');
 
 const ISSUE_WIKI_API_BASE = 'https://wiki.agnet.top/api';
 const STATE_VERSION = 2;
@@ -95,6 +96,12 @@ async function requestDonationApi(path, options = {}) {
 
 /** 提供远程支付、本地累计计数和自动提示状态。 */
 function createDonationService({ app, onPrompt, onPaid }) {
+  // 内部发行仅累计本地使用数据，不提示打赏、不恢复订单，也不请求支付服务。
+  const paymentsEnabled = product.distribution !== 'internal-manual';
+  const requestPaymentApi = async (...args) => {
+    if (!paymentsEnabled) throw new Error('公司内部版已停用打赏与支付服务');
+    return requestDonationApi(...args);
+  };
   const stateFile = getDonationStateFilePath(app);
   const state = readState(stateFile);
   let runtimeCheckpoint = performance.now();
@@ -145,7 +152,7 @@ function createDonationService({ app, onPrompt, onPaid }) {
     const bucket = Math.floor(state.accumulatedRuntimeMs / RUNTIME_PROMPT_INTERVAL_MS);
     if (bucket <= state.processedRuntimeBucket) return false;
     state.processedRuntimeBucket = bucket;
-    if (!donated) onPrompt?.(summary('runtime'));
+    if (paymentsEnabled && !donated) onPrompt?.(summary('runtime'));
     return true;
   };
 
@@ -177,7 +184,7 @@ function createDonationService({ app, onPrompt, onPaid }) {
     const activeRequest = orderStatusRequests.get(merchantOrderNo);
     if (activeRequest) return activeRequest;
 
-    const request = requestDonationApi(path, options)
+    const request = requestPaymentApi(path, options)
       .then((order) => {
         if (order.status === 'paid') {
           markDonated();
@@ -221,7 +228,7 @@ function createDonationService({ app, onPrompt, onPaid }) {
 
   /** 后台恢复所有未确认订单，到期后改由渠道查询最终确认。 */
   const checkPendingOrder = async () => {
-    if (state.pendingOrders.length === 0 || pendingOrderCheckRunning) return;
+    if (!paymentsEnabled || state.pendingOrders.length === 0 || pendingOrderCheckRunning) return;
     pendingOrderCheckRunning = true;
     try {
       for (const pendingOrder of [...state.pendingOrders]) {
@@ -254,12 +261,14 @@ function createDonationService({ app, onPrompt, onPaid }) {
     }
   }, RUNTIME_CHECK_INTERVAL_MS);
 
-  const pendingOrderStartupTimer = setTimeout(() => void checkPendingOrder(), 1000);
+  const pendingOrderStartupTimer = paymentsEnabled
+    ? setTimeout(() => void checkPendingOrder(), 1000)
+    : null;
 
   return {
-    getConfig: () => requestDonationApi('/payments/config'),
+    getConfig: () => requestPaymentApi('/payments/config'),
     async createTip(request) {
-      const intent = await requestDonationApi('/payments/tip', {
+      const intent = await requestPaymentApi('/payments/tip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
@@ -284,14 +293,14 @@ function createDonationService({ app, onPrompt, onPaid }) {
       let prompt = null;
       if (bucket > state.processedExportBucket) {
         state.processedExportBucket = bucket;
-        if (!donated) prompt = summary('word-export');
+        if (paymentsEnabled && !donated) prompt = summary('word-export');
       }
       tryPersist('保存 Word 导出次数');
       if (prompt && !deferPrompt) onPrompt?.(prompt);
       return prompt;
     },
     showPrompt(prompt) {
-      if (prompt && !donated) {
+      if (paymentsEnabled && prompt && !donated) {
         checkpointRuntime();
         onPrompt?.(summary(prompt.reason));
       }

@@ -8,6 +8,7 @@ const resourcesDir = path.join(projectRoot, 'electron', 'resources');
 const attestationPath = path.join(resourcesDir, 'build-attestation.json');
 const publicKeyPath = path.join(resourcesDir, 'license-public-key.json');
 const packageJson = require(path.join(projectRoot, 'package.json'));
+const product = require(path.join(projectRoot, 'assets', 'product.json'));
 
 function base64UrlEncode(buffer) {
   return Buffer.from(buffer)
@@ -91,16 +92,21 @@ function getBuildId() {
 }
 
 async function main() {
-  const privateJwk = parseJwkEnv('YIBIAO_LICENSE_PRIVATE_KEY_JWK');
-  const publicJwk = publicJwkFromPrivate(privateJwk)
+  const internalDistribution = product.distribution === 'internal-manual';
+  // 内部发行只记录构建信息，不使用作者签名密钥，也不声称构建通过作者认证。
+  const privateJwk = internalDistribution ? null : parseJwkEnv('YIBIAO_LICENSE_PRIVATE_KEY_JWK');
+  if (!internalDistribution && process.env.GITHUB_ACTIONS === 'true' && !privateJwk) {
+    throw new Error('YIBIAO_LICENSE_PRIVATE_KEY_JWK is required for official release builds.');
+  }
+  const publicJwk = internalDistribution ? null : publicJwkFromPrivate(privateJwk)
     || parseJwkEnv('YIBIAO_LICENSE_PUBLIC_KEY_JWK')
     || readJsonFile(publicKeyPath);
-  if (!publicJwk) {
+  if (!internalDistribution && !publicJwk) {
     throw new Error('license public key is missing');
   }
 
   fs.mkdirSync(resourcesDir, { recursive: true });
-  fs.writeFileSync(publicKeyPath, `${JSON.stringify(publicJwk, null, 2)}\n`, 'utf-8');
+  if (publicJwk) fs.writeFileSync(publicKeyPath, `${JSON.stringify(publicJwk, null, 2)}\n`, 'utf-8');
 
   const payload = {
     projectName: packageJson.name || 'yibiao-client',
@@ -109,13 +115,16 @@ async function main() {
     buildId: getBuildId(),
     gitCommitSha: getGitCommitSha(),
     builtAt: String(process.env.YIBIAO_BUILT_AT || '').trim() || new Date().toISOString(),
-    keyId: String(process.env.YIBIAO_LICENSE_KEY_ID || '').trim() || 'official-build-key-2026-01',
-    algorithm: 'ECDSA_P256_SHA256',
+    distribution: product.distribution || 'official',
+    keyId: internalDistribution ? '' : String(process.env.YIBIAO_LICENSE_KEY_ID || '').trim() || 'official-build-key-2026-01',
+    algorithm: internalDistribution ? 'none' : 'ECDSA_P256_SHA256',
   };
   const signature = await signPayload(payload, privateJwk);
   fs.writeFileSync(attestationPath, `${JSON.stringify({ ...payload, signature }, null, 2)}\n`, 'utf-8');
 
-  if (signature) {
+  if (internalDistribution) {
+    console.log(`[distribution] wrote unsigned internal build metadata ${payload.buildId}`);
+  } else if (signature) {
     console.log(`[license] signed build attestation ${payload.buildId}`);
   } else {
     console.log('[license] wrote unsigned development build attestation');

@@ -1,16 +1,16 @@
 /* [1-25] root vars + universal box-sizing reset */
 :root {
-  --yb-primary: #2174fd;
-  --yb-primary-hover: #4098fc;
-  --yb-primary-deep: #155bd7;
-  --yb-violet: #5b54d3;
-  --yb-bg: #fafcff;
+  --yb-primary: #c51f45;
+  --yb-primary-hover: #ac183b;
+  --yb-primary-deep: #941433;
+  --yb-violet: #a91d3d;
+  --yb-bg: #f5f5f6;
   --yb-surface: #ffffff;
-  --yb-border: #e6e9f0;
-  --yb-border-soft: #eef2f9;
-  --yb-text: #1c2536;
-  --yb-text-soft: #66707f;
-  --yb-text-muted: #98a2b3;
+  --yb-border: #dedee3;
+  --yb-border-soft: #ebebee;
+  --yb-text: #202126;
+  --yb-text-soft: #62636b;
+  --yb-text-muted: #73747d;
 
   /* 语义色：成功 / 警告 / 危险，各含主色、深文字、浅背景、边框四档 */
   --yb-success: #168a4a;
@@ -29,20 +29,20 @@
   /* 圆角阶梯：胶囊用 pill，卡片用 xl，面板内容块用 lg/md，小控件用 sm */
   --yb-radius-sm: 8px;
   --yb-radius-md: 12px;
-  --yb-radius-lg: 16px;
-  --yb-radius-xl: 24px;
+  --yb-radius-lg: 10px;
+  --yb-radius-xl: 14px;
   --yb-radius-pill: 999px;
 
   /* 分层阴影体系：由弱到强，元素层级越高、越需要强调，阴影越重 */
   --yb-shadow-xs: 0 2px 8px rgba(23, 32, 51, 0.04);
-  --yb-shadow-sm: 0 8px 20px rgba(33, 116, 253, 0.05);
-  --yb-shadow: 0 18px 40px rgba(33, 116, 253, 0.07);
-  --yb-shadow-lg: 0 30px 64px rgba(33, 116, 253, 0.11), 0 10px 26px rgba(23, 32, 51, 0.06);
-  --yb-shadow-hover: 0 22px 46px rgba(33, 116, 253, 0.16), 0 8px 18px rgba(23, 32, 51, 0.08);
+  --yb-shadow-sm: 0 8px 20px rgba(197, 31, 69, 0.05);
+  --yb-shadow: 0 18px 40px rgba(197, 31, 69, 0.07);
+  --yb-shadow-lg: 0 30px 64px rgba(197, 31, 69, 0.11), 0 10px 26px rgba(23, 32, 51, 0.06);
+  --yb-shadow-hover: 0 22px 46px rgba(197, 31, 69, 0.16), 0 8px 18px rgba(23, 32, 51, 0.08);
   --yb-shadow-modal: 0 28px 72px rgba(23, 32, 51, 0.16);
 
   /* 统一键盘焦点环 */
-  --yb-focus-ring: 0 0 0 3px rgba(33, 116, 253, 0.22);
+  --yb-focus-ring: 0 0 0 3px rgba(197, 31, 69, 0.22);
 
   /* 统一过渡节奏：交互反馈用更快的 ease-out，跨状态切换用更柔和的曲线 */
   --yb-ease: cubic-bezier(0.16, 1, 0.3, 1);
@@ -117,7 +117,7 @@ button:focus-visible,
 a:focus-visible,
 [role='button']:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid rgba(33, 116, 253, 0.55);
+  outline: 2px solid rgba(197, 31, 69, 0.55);
   outline-offset: 2px;
 }
 

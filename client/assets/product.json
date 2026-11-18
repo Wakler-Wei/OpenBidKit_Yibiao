@@ -1,0 +1,8 @@
+{
+  "name": "微品致远投标工作台",
+  "appId": "com.weipin.bidworkbench",
+  "dataDirectory": "weipin-bid-workbench",
+  "distribution": "internal-manual",
+  "repository": "https://github.com/Wakler-Wei/OpenBidKit_Yibiao",
+  "manualUpdateMessage": "内部版通过人工分发安装包更新，请联系内部管理员获取新版本。"
+}

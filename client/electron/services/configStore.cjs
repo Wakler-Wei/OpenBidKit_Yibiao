@@ -202,12 +202,12 @@ const defaultImageModelProfiles = {
 };
 
 const defaultConfig = {
-  text_model_provider: 'official',
+  text_model_provider: 'custom',
   official_api_model_type: 'cost-effective',
   text_model_profiles: defaultTextModelProfiles,
-  ...defaultTextModelProfiles.official,
+  ...defaultTextModelProfiles.custom,
   image_model: {
-    ...defaultImageModelProfiles.jinlong,
+    ...defaultImageModelProfiles.custom,
   },
   image_model_profiles: defaultImageModelProfiles,
   components: {
@@ -489,10 +489,13 @@ function normalizeConfig(config) {
   const hasTextProvider = Object.prototype.hasOwnProperty.call(source, 'text_model_provider');
   const rawTextProvider = typeof source.text_model_provider === 'string' ? source.text_model_provider : '';
   const sourceTextProvider = isTextModelProvider(rawTextProvider) ? rawTextProvider : '';
-  const textModelProvider = sourceTextProvider
+  const textModelProvider = (sourceTextProvider === 'official' ? 'custom' : sourceTextProvider)
     || (hasTextProvider ? defaultConfig.text_model_provider : config ? 'custom' : defaultConfig.text_model_provider);
   const textModelProfiles = normalizeTextModelProfiles(source.text_model_profiles);
-  if (sourceTextProvider) {
+  if (sourceTextProvider === 'official') {
+    // 官方账户凭证不复制到第三方接口；保留已保存的自定义档案。
+    textModelProfiles.official = textProfileFromFlatConfig(source, textModelProfiles.official, 'official');
+  } else if (sourceTextProvider) {
     const fallbackProfile = textModelProfiles[textModelProvider]
       || defaultTextModelProfiles[textModelProvider];
     textModelProfiles[textModelProvider] = textProfileFromFlatConfig(source, fallbackProfile, textModelProvider);
@@ -508,9 +511,12 @@ function normalizeConfig(config) {
   };
   const activeTextProfile = textModelProfiles[textModelProvider];
   const sourceImageModel = source.image_model && typeof source.image_model === 'object' ? source.image_model : {};
-  const imageModelProvider = isImageModelProvider(sourceImageModel.provider) ? sourceImageModel.provider : defaultConfig.image_model.provider;
+  const imageModelProvider = isImageModelProvider(sourceImageModel.provider) && sourceImageModel.provider !== 'official'
+    ? sourceImageModel.provider : defaultConfig.image_model.provider;
   const imageModelProfiles = normalizeImageModelProfiles(source.image_model_profiles);
-  imageModelProfiles[imageModelProvider] = normalizeImageModelProfile(imageModelProvider, sourceImageModel);
+  if (sourceImageModel.provider !== 'official') {
+    imageModelProfiles[imageModelProvider] = normalizeImageModelProfile(imageModelProvider, sourceImageModel);
+  }
   const activeImageProfile = imageModelProfiles[imageModelProvider];
   const hasGpuHardwareAccelerationEnabled = typeof source.gpu_hardware_acceleration_enabled === 'boolean';
   const hasGpuHardwareAccelerationConfigured = typeof source.gpu_hardware_acceleration_configured === 'boolean';

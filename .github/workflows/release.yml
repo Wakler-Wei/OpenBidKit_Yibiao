@@ -161,10 +161,6 @@ jobs:
           YIBIAO_LICENSE_PRIVATE_KEY_JWK: ${{ secrets.YIBIAO_LICENSE_PRIVATE_KEY_JWK }}
           YIBIAO_LICENSE_KEY_ID: ${{ vars.YIBIAO_LICENSE_KEY_ID || 'official-build-key-2026-01' }}
         run: |
-          if [ -z "$YIBIAO_LICENSE_PRIVATE_KEY_JWK" ]; then
-            echo "YIBIAO_LICENSE_PRIVATE_KEY_JWK is required for official release builds."
-            exit 1
-          fi
           npm run generate-build-attestation
 
       - name: Build renderer
@@ -282,10 +278,6 @@ jobs:
           YIBIAO_LICENSE_PRIVATE_KEY_JWK: ${{ secrets.YIBIAO_LICENSE_PRIVATE_KEY_JWK }}
           YIBIAO_LICENSE_KEY_ID: ${{ vars.YIBIAO_LICENSE_KEY_ID || 'official-build-key-2026-01' }}
         run: |
-          if [ -z "$YIBIAO_LICENSE_PRIVATE_KEY_JWK" ]; then
-            echo "YIBIAO_LICENSE_PRIVATE_KEY_JWK is required for official release builds."
-            exit 1
-          fi
           npm run generate-build-attestation
 
       - name: Generate macOS icon

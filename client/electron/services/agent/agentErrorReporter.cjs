@@ -2,6 +2,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { utilityProcess } = require('electron');
 const { isExpectedAgentInterruption } = require('./agentInterruption.cjs');
+const { getAgentErrorReportsDir } = require('../../utils/paths.cjs');
+const product = require('../../../assets/product.json');
 
 const ANALYTICS_ENDPOINT = process.env.YIBIAO_AGENT_ERROR_ENDPOINT || 'https://analytics.agnet.top/agent-errors';
 const PROJECT_NAME = 'yibiao-client';
@@ -132,7 +134,10 @@ function createAgentErrorReporter({ app, configStore, licenseService }) {
         }
       });
       child.once('error', finish);
-      child.once('exit', finish);
+      child.once('exit', (code) => {
+        if (code && job.localReportDir && !closing) console.warn('[agent-diagnostics] 本地失败诊断包生成未完成');
+        finish();
+      });
     });
   }
 
@@ -140,8 +145,12 @@ function createAgentErrorReporter({ app, configStore, licenseService }) {
     const config = configStore.load();
     const license = normalizeLicenseEnvelope(licenseService?.getLicenseEnvelope?.());
     const version = typeof app?.getVersion === 'function' ? app.getVersion() : '';
-    if (closing || !license || !version || !config.analytics_client_id || !config.analytics_created_at) return;
-    if (!await canUploadCurrentVersion(version)) return;
+    const localOnly = product.distribution === 'internal-manual';
+    if (closing) return;
+    if (!localOnly) {
+      if (!license || !version || !config.analytics_client_id || !config.analytics_created_at) return;
+      if (!await canUploadCurrentVersion(version)) return;
+    }
     if (closing) return;
 
     return startProcess({
@@ -150,6 +159,7 @@ function createAgentErrorReporter({ app, configStore, licenseService }) {
       projectName: PROJECT_NAME,
       occurredAt: new Date().toISOString(),
       endpoint: ANALYTICS_ENDPOINT,
+      localReportDir: localOnly ? getAgentErrorReportsDir(app) : '',
       maxCompressedBytes: MAX_COMPRESSED_BYTES,
       uploadTimeoutMs: UPLOAD_TIMEOUT_MS,
       runtimeId: PI_RUNTIME_ID,

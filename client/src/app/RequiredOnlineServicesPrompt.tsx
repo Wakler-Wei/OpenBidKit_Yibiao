@@ -47,7 +47,7 @@ function RequiredOnlineServicesPrompt() {
             ))}
           </ul>
           <p className="required-online-services-offline-note">
-            如需内网使用，请联系作者购买离线包
+            请检查网络连接；如需内网使用，请联系内部管理员确认相关服务的接入方式。
           </p>
           <div className="content-regenerate-actions">
             <button type="button" className="primary-action" onClick={() => setUnavailableServices([])}>我知道了</button>

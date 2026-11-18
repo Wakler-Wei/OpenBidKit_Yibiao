@@ -8,6 +8,8 @@ const { getLicenseFilePath } = require('../utils/paths.cjs');
 const { getOsMachineId } = require('../utils/machineIdentity.cjs');
 
 const packageJson = require('../../package.json');
+const product = require('../../assets/product.json');
+const { createInternalDistributionService } = require('./internalDistributionService.cjs');
 
 const LICENSE_ENDPOINT = process.env.YIBIAO_LICENSE_ENDPOINT || 'https://analytics.agnet.top/license/activate';
 const PROJECT_NAME = packageJson.name || 'yibiao-client';
@@ -286,6 +288,9 @@ function statusFromPayload(payload, status, extra = {}) {
 }
 
 function createLicenseService({ app, configStore }) {
+  if (product.distribution === 'internal-manual') {
+    return createInternalDistributionService({ app });
+  }
   const licenseFile = getLicenseFilePath(app);
   const debugLicenseDisabled = !app.isPackaged;
   let currentStatus = debugLicenseDisabled ? createDebugDisabledStatus() : createBaseStatus();

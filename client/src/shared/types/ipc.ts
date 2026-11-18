@@ -298,15 +298,15 @@ export interface AgentQuestionAnswerResult {
   success: boolean;
 }
 
-export type LicenseStatusValue = 'missing' | 'active' | 'expired' | 'invalid' | 'invalidated' | 'machine_mismatch' | 'refresh_failed' | 'debug_disabled';
+export type LicenseStatusValue = 'missing' | 'active' | 'expired' | 'invalid' | 'invalidated' | 'machine_mismatch' | 'refresh_failed' | 'debug_disabled' | 'internal_distribution';
 
 export interface LicenseRuntimeStatus {
   status: LicenseStatusValue | string;
-  plan: 'free' | 'personal_premium' | 'enterprise_premium' | string;
+  plan: 'free' | 'personal_premium' | 'enterprise_premium' | 'internal' | string;
   expiresAt: string;
   licenseExpiresAt: string;
   licenseStatus: string;
-  activationMode: 'online' | 'offline' | 'debug_disabled' | string;
+  activationMode: 'online' | 'offline' | 'debug_disabled' | 'internal_distribution' | string;
   sourceTrusted: boolean;
   sourceTrustedText: string;
   untrustedReason: string;
@@ -682,6 +682,10 @@ export interface YibiaoBridge {
   storage: {
     getUsage: () => Promise<StorageUsage>;
     clean: (groupId: StorageCleanGroupId) => Promise<StorageCleanResult>;
+  };
+  agentDiagnostics: {
+    list: () => Promise<Array<{ name: string; createdAt: string; bytes: number }>>;
+    exportReport: (name: string) => Promise<{ canceled: boolean; path?: string }>;
   };
   license: {
     getStatus: () => Promise<LicenseRuntimeStatus>;

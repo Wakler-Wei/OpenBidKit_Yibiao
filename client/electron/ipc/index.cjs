@@ -1,5 +1,7 @@
 const { clipboard, dialog, ipcMain, powerMonitor, shell } = require('electron');
 const { registerAgentIpc } = require('./agentIpc.cjs');
+const { registerAgentDiagnosticIpc } = require('./agentDiagnosticIpc.cjs');
+const { createAgentDiagnosticService } = require('../services/agentDiagnosticService.cjs');
 const { registerAiIpc } = require('./aiIpc.cjs');
 const { registerAutoConfirmationIpc } = require('./autoConfirmationIpc.cjs');
 const { registerConfigIpc } = require('./configIpc.cjs');
@@ -528,9 +530,10 @@ function registerIpcHandlers({ app, mainWindow, checkAndDownloadUpdate, triggerU
   registerLicenseIpc({ licenseService });
   registerNoticeIpc({ noticeMediaCacheService });
   registerOfficialAccountIpc({ officialAccountService });
-  void officialAccountService.start().catch(() => undefined);
+  // 内部版只使用员工自配 Key，不在启动时初始化作者账户或刷新登录态。
   registerAiIpc({ aiService });
   registerAgentIpc({ agentService });
+  registerAgentDiagnosticIpc({ agentDiagnosticService: createAgentDiagnosticService({ app, dialog }) });
   registerAutoConfirmationIpc({ autoConfirmationService });
   registerFileIpc({ fileService });
   registerExportIpc({ exportService, donationService });

@@ -1,6 +1,14 @@
 const { app, BrowserWindow, nativeTheme, shell, protocol, net } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+const product = require('../assets/product.json');
+
+// 在任何启动配置或服务读取前设置独立目录，不读取或迁移原易标数据。
+app.setName(product.name);
+const productDataPath = path.join(app.getPath('appData'), product.dataDirectory);
+fs.mkdirSync(productDataPath, { recursive: true });
+app.setPath('userData', productDataPath);
+if (process.platform === 'win32') app.setAppUserModelId(product.appId);
 const { pathToFileURL } = require('node:url');
 const { registerIpcHandlers } = require('./ipc/index.cjs');
 const { setupAutoUpdate, checkAndDownloadUpdate, triggerUpdateDownload, isUpdateCacheInUse, quitAndInstall, getLatestVersion, getUpdateDownloadUrl } = require('./services/updateService.cjs');
@@ -9,7 +17,7 @@ const { createNoticeMediaResponse } = require('./services/noticeMediaResponse.cj
 const { ensureDiagnosisSource } = require('./services/diagnosisSourceService.cjs');
 
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
-const iconPath = path.join(__dirname, '../assets/icon.ico');
+const iconPath = path.join(__dirname, '../assets/company-app.ico');
 const packagedIndexUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).toString();
 const IP_BLOCK_LIST_ENDPOINT = 'https://analytics.agnet.top/ip-blocks';
 const GPU_HARDWARE_ACCELERATION_TRIAL_ARG = '--yibiao-trial-hardware-acceleration';
@@ -22,8 +30,11 @@ let services = null;
 let closeBeforeQuitStarted = false;
 let quitAfterClose = false;
 
-// 应用正常启动后静默检查公网出口 IP，仅明确命中封禁列表时结束进程。
+// 公司内部版固定按空名单处理，不请求作者封禁接口，也不受其返回值影响。
+// 仅停用客户端的启动退出策略；普通埋点、服务端封禁和统计聚合保持原样。
+// 非内部发行仍在启动后查询公网出口 IP，仅明确命中封禁列表时结束进程。
 async function checkBlockedIpAfterStartup() {
+  if (product.distribution === 'internal-manual') return { code: 0, clientIp: '', blockedIps: [] };
   try {
     const response = await net.fetch(IP_BLOCK_LIST_ENDPOINT, {
       cache: 'no-store',
@@ -343,7 +354,7 @@ function createMainWindow() {
     minWidth: 1040,
     minHeight: 720,
     backgroundColor: '#f8fafd',
-    title: '易标投标工具箱',
+    title: product.name,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {

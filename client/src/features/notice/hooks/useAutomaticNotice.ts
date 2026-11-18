@@ -57,6 +57,8 @@ export function useAutomaticNotice(enabled: boolean) {
   }, [enabled, notice]);
 
   useEffect(() => {
+    // 内部版停用作者公告时，不请求内容、准备媒体或启动轮询。
+    if (!enabled) return;
     let disposed = false;
     let requestId = 0;
     let targetId = '';
@@ -123,7 +125,7 @@ export function useAutomaticNotice(enabled: boolean) {
       window.clearInterval(timer);
       delete window.__yibiaoCheckRemoteNotice;
     };
-  }, []);
+  }, [enabled]);
 
   /** 按配置先打开链接再关闭；异步期间防止重复点击和误关闭新版本。 */
   const close = async () => {

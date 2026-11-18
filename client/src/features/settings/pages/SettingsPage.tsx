@@ -10,6 +10,9 @@ import { useChangelogUnread } from '../../changelog/hooks/useChangelogUnread';
 import OfficialApiPanel from '../components/OfficialApiPanel';
 import type { OfficialApiTab } from '../components/OfficialApiPanel';
 import StorageSpaceDialog from '../components/StorageSpaceDialog';
+import ModelSetupGuide from '../components/ModelSetupGuide';
+import AgentDiagnosticsPanel from '../components/AgentDiagnosticsPanel';
+import product from '../../../../assets/product.json';
 
 type UpdateStatus = 'idle' | 'checking' | 'downloading' | 'downloaded' | 'error' | 'disabled';
 type AgentSelfCheckUiStatus = 'untested' | 'checking' | 'normal' | 'busy' | 'error';
@@ -40,12 +43,6 @@ const agentDiagnosticStatusMeta: Record<AgentSelfCheckStepStatus, { label: strin
   skipped: { label: '已跳过', description: '因前置条件不足或无需执行而跳过。' },
 };
 
-const updateChannelOptions: Array<{ value: UpdateChannel; label: string; description: string }> = [
-  { value: 'github', label: 'GitHub', description: '使用 GitHub Release 检查和下载更新' },
-  { value: 'cloudflare', label: 'Cloudflare', description: '使用 Cloudflare R2 镜像检查和下载更新' },
-  { value: 'atomgit', label: 'AtomGit', description: '使用 AtomGit Release 检查和下载更新' },
-];
-
 function normalizeUpdateChannel(value?: string): UpdateChannel {
   if (value === 'github' || value === 'cloudflare' || value === 'atomgit') {
     return value;
@@ -55,12 +52,13 @@ function normalizeUpdateChannel(value?: string): UpdateChannel {
 
 function getLicenseSourceLabel(status: LicenseRuntimeStatus | null) {
   if (!status) return '读取中';
-  return status.sourceTrusted ? '官方发行版' : '不可信的客户端来源';
+  if (status.activationMode === 'internal_distribution') return '公司内部发行 · 无需激活';
+  if (status.activationMode === 'debug_disabled') return '开发调试模式（未验证安装包授权）';
+  return status.sourceTrusted ? '原项目授权校验通过' : '原项目授权未验证';
 }
 
 const textModelProviders: Array<{ value: TextModelProvider; label: string }> = [
-  { value: 'official', label: '易标官方API' },
-  { value: 'jinlong', label: '金龙中转站【推荐】' },
+  { value: 'jinlong', label: '金龙中转站' },
   { value: 'volcengine', label: '火山方舟' },
   { value: 'deepseek', label: 'DeepSeek' },
   { value: 'agnes', label: 'Agnes AI' },
@@ -98,16 +96,16 @@ async function persistSettingsConfig(config: ClientConfig) {
 }
 
 const textProviderApiKeyUrls: Partial<Record<TextModelProvider, string>> = {
-  jinlong: 'https://s.markup.com.cn/jl',
+  jinlong: 'https://jlaudeapi.com/',
   volcengine: 'https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey',
   deepseek: 'https://platform.deepseek.com/api_keys',
   agnes: 'https://platform.agnes-ai.com/settings/apiKeys',
 };
 
 function createDefaultTextModelProfiles(): TextModelProfiles {
-  return textModelProviders.reduce((profiles, provider) => ({
+  return (Object.keys(textProviderDefaults) as TextModelProvider[]).reduce((profiles, provider) => ({
     ...profiles,
-    [provider.value]: { ...textProviderDefaults[provider.value] },
+    [provider]: { ...textProviderDefaults[provider] },
   }), {} as TextModelProfiles);
 }
 
@@ -184,9 +182,9 @@ function normalizeTextModelProfile(provider: TextModelProvider, profile?: Partia
 function normalizeTextModelProfiles(
   profiles?: Partial<Record<TextModelProvider, TextModelConfig>>,
 ): TextModelProfiles {
-  return textModelProviders.reduce((normalizedProfiles, provider) => ({
+  return (Object.keys(textProviderDefaults) as TextModelProvider[]).reduce((normalizedProfiles, provider) => ({
     ...normalizedProfiles,
-    [provider.value]: normalizeTextModelProfile(provider.value, profiles?.[provider.value]),
+    [provider]: normalizeTextModelProfile(provider, profiles?.[provider]),
   }), {} as TextModelProfiles);
 }
 
@@ -208,8 +206,7 @@ function textProfileFromState(textModel: SettingsPageState['textModel']): TextMo
 }
 
 const imageProviders: Array<{ value: ImageModelProvider; label: string }> = [
-  { value: 'official', label: '易标官方API' },
-  { value: 'jinlong', label: '金龙中转站【推荐】' },
+  { value: 'jinlong', label: '金龙中转站' },
   { value: 'volcengine', label: '火山方舟' },
   { value: 'google-ai-studio', label: 'Google AI Studio' },
   { value: 'agnes', label: 'Agnes AI' },
@@ -373,7 +370,7 @@ const imageProviderDefaults: ImageModelProfiles = {
 
 const imageProviderApiKeyUrls: Record<ImageModelProvider, string> = {
   official: '',
-  jinlong: 'https://s.markup.com.cn/jl',
+  jinlong: 'https://jlaudeapi.com/',
   volcengine: 'https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey',
   'google-ai-studio': 'https://aistudio.google.com/api-keys',
   agnes: 'https://platform.agnes-ai.com/settings/apiKeys',
@@ -428,9 +425,9 @@ function getImageModelPlaceholder(provider: ImageModelProvider) {
 }
 
 function createDefaultImageModelProfiles(): ImageModelProfiles {
-  return imageProviders.reduce((profiles, provider) => ({
+  return (Object.keys(imageProviderDefaults) as ImageModelProvider[]).reduce((profiles, provider) => ({
     ...profiles,
-    [provider.value]: { ...imageProviderDefaults[provider.value] },
+    [provider]: { ...imageProviderDefaults[provider] },
   }), {} as ImageModelProfiles);
 }
 
@@ -518,9 +515,9 @@ function componentsFromState(components: SettingsPageState['components']): Compo
 }
 
 function normalizeImageModelProfiles(profiles?: Partial<ImageModelProfiles>): ImageModelProfiles {
-  return imageProviders.reduce((nextProfiles, provider) => ({
+  return (Object.keys(imageProviderDefaults) as ImageModelProvider[]).reduce((nextProfiles, provider) => ({
     ...nextProfiles,
-    [provider.value]: normalizeImageModelProfile(provider.value, profiles?.[provider.value]),
+    [provider]: normalizeImageModelProfile(provider, profiles?.[provider]),
   }), {} as ImageModelProfiles);
 }
 
@@ -640,13 +637,13 @@ const parserOptions = [
 
 const initialState: SettingsPageState = {
   textModel: {
-    provider: 'official',
-    ...textProviderDefaults.official,
+    provider: 'custom',
+    ...textProviderDefaults.custom,
   },
   textModelProfiles: createDefaultTextModelProfiles(),
   officialApiModelType: 'cost-effective',
   imageModel: {
-    ...imageProviderDefaults.jinlong,
+    ...imageProviderDefaults.custom,
   },
   imageModelProfiles: createDefaultImageModelProfiles(),
   components: {
@@ -771,7 +768,7 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
   // 复用账户通知同步自动保存的 Key，只更新该字段，不覆盖页面其他草稿。
   const configLoaded = savedConfig !== null;
   useEffect(() => {
-    if (!configLoaded) return;
+    if (!configLoaded || state.textModel.provider !== 'official') return;
     let disposed = false;
     let revision = 0;
     const syncOfficialKey = async () => {
@@ -928,7 +925,7 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
       const result = await window.yibiao?.checkUpdate();
       if (!result?.enabled) {
         setUpdateStatus('disabled');
-        showToast('开发调试模式不执行自动更新', 'info');
+        showToast(result?.message || product.manualUpdateMessage, 'info');
         return;
       }
       if (result.failed) {
@@ -1047,13 +1044,6 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
     setState((prev) => ({
       ...prev,
       general: { ...prev.general, developer_agent_monitor_auto_open: autoOpen },
-    }));
-  };
-
-  const updateUpdateChannel = (updateChannel: UpdateChannel) => {
-    setState((prev) => ({
-      ...prev,
-      general: { ...prev.general, update_channel: updateChannel },
     }));
   };
 
@@ -1721,8 +1711,7 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
     if (updateStatus === 'downloading') return `正在下载 ${updatePercent}%`;
     if (updateStatus === 'downloaded') return updateVersion ? `新版本 ${updateVersion} 已准备好` : '更新已准备好';
     if (updateStatus === 'error') return `更新失败：${updateError || '未知错误'}`;
-    if (updateStatus === 'disabled') return '开发调试模式不执行自动更新';
-    return '启动后自动检查，每 30 分钟轮询';
+    return product.manualUpdateMessage;
   })();
   const licenseSourceLabel = getLicenseSourceLabel(licenseStatus);
   const currentImageSizeOptions = getImageSizeOptions(state.imageModel.provider, state.imageModel.model_name);
@@ -1731,6 +1720,10 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
   return (
     <div className="settings-page">
       <div className="settings-page-scroll">
+        <header className="settings-heading">
+          <div><h1>模型与应用设置</h1><p>配置自己的模型服务，让工具适应你的工作方式。</p></div>
+          <span>公司内部版</span>
+        </header>
         <div className="settings-tab-shell" role="tablist" aria-label="设置分类">
           {settingsTabs.map((tab) => (
             <button
@@ -1781,20 +1774,13 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
 
           <div className="settings-group-title">更新与系统</div>
           <div className="settings-list">
-            <label className="settings-row">
+            <div className="settings-row">
               <div className="settings-row-copy">
-                <strong>自动更新渠道</strong>
-                <span>{updateChannelOptions.find((option) => option.value === state.general.update_channel)?.description || '选择自动检查更新和下载客户端安装包的来源'}</span>
+                <strong>安装包更新</strong>
+                <span>{product.manualUpdateMessage}</span>
               </div>
-              <select
-                value={state.general.update_channel}
-                onChange={(event) => updateUpdateChannel(event.target.value as UpdateChannel)}
-              >
-                {updateChannelOptions.map((option) => (
-                  <option value={option.value} key={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
+              <span className="settings-readonly-value">人工分发 · 自动更新已停用</span>
+            </div>
             <label className="settings-row">
               <div className="settings-row-copy">
                 <strong>GPU 硬件加速</strong>
@@ -1806,6 +1792,7 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
 
           <div className="settings-group-title">存储</div>
           <div className="settings-list">
+            <AgentDiagnosticsPanel />
             <div className="settings-row">
               <div className="settings-row-copy">
                 <strong>存储空间</strong>
@@ -1884,6 +1871,7 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
       )}
 
       {activeTab === 'text-model' && (
+        <div className="settings-model-layout">
         <section className={`settings-page-section${state.textModel.provider === 'official' ? ' settings-official-api' : ''}`}>
           <div className="settings-group-title">服务商配置</div>
           <div className="settings-list">
@@ -1940,7 +1928,7 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
                 <label className="settings-row">
                   <div className="settings-row-copy">
                     <strong>API Key</strong>
-                    <span>仅保存在本机配置文件中，不暴露给 Renderer 以外的原始能力</span>
+                    <span>使用你自己开通的 Key，保存在本机配置中</span>
                   </div>
                   <InputWithAction
                     type="password"
@@ -2111,9 +2099,12 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
             </>
           )}
         </section>
+        <ModelSetupGuide />
+        </div>
       )}
 
       {activeTab === 'image-model' && (
+        <div className="settings-model-layout">
         <section className={`settings-page-section${state.imageModel.provider === 'official' ? ' settings-official-api' : ''}`}>
           <div className={`image-model-status is-${imageModelStatus}`}>
             <div>
@@ -2355,6 +2346,8 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
             </div>
           )}
         </section>
+        <ModelSetupGuide image />
+        </div>
       )}
 
       {activeTab === 'components' && (
@@ -2616,7 +2609,7 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
           <div className="about-overview">
             <article className="about-update-card">
               <div className="about-card-head">
-                <span>自动更新</span>
+                <span>{product.name}</span>
                 <strong>当前版本 {appVersion || '...'}</strong>
               </div>
               <p>{updateStatusText}</p>
@@ -2624,7 +2617,7 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
                 <button
                   type="button"
                   className="update-button"
-                  disabled={updateBusy}
+                  disabled
                   onClick={() => {
                     if (updateStatus === 'downloaded') {
                       void installDownloadedUpdate();
@@ -2633,7 +2626,7 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
                     void checkForUpdates();
                   }}
                 >
-                  {updateStatus === 'downloaded' ? '安装并重启' : updateBusy ? '检查中...' : '检查更新'}
+                  自动更新已停用
                 </button>
                 <button
                   type="button"
@@ -2641,7 +2634,7 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
                   onClick={() => setChangelogOpen(true)}
                 >
                   {changelogUnread ? <span className="about-changelog-dot" aria-hidden="true" /> : null}
-                  查看更新日志
+                  原项目更新日志
                 </button>
               </div>
             </article>
@@ -2649,37 +2642,27 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
               <span>信息与授权</span>
               <ul className="about-links-list">
                 <li className="about-links-item">
-                  <span className="about-links-label">GitHub 仓库</span>
+                  <span className="about-links-label">内部版源码</span>
                   <a
                     className="about-links-value is-link"
-                    href="https://github.com/FB208/OpenBidKit_Yibiao"
+                    href={product.repository}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    FB208/OpenBidKit_Yibiao
+                    Wakler-Wei/OpenBidKit_Yibiao
                   </a>
                 </li>
                 <li className="about-links-item">
-                  <span className="about-links-label">使用文档</span>
-                  <a
-                    className="about-links-value is-link"
-                    href="https://wiki.agnet.top/"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    wiki.agnet.top
-                  </a>
-                </li>
-                <li className="about-links-item">
-                  <span className="about-links-label">客户端授权状态</span>
-                  <span className={`about-links-value ${licenseStatus?.sourceTrusted ? 'is-trusted' : 'is-untrusted'}`}>
+                  <span className="about-links-label">客户端发行方式</span>
+                  <span className={`about-links-value ${licenseStatus?.activationMode === 'internal_distribution' ? '' : licenseStatus?.sourceTrusted ? 'is-trusted' : 'is-untrusted'}`}>
                     {licenseSourceLabel}
                   </span>
                 </li>
               </ul>
-              <button type="button" className="about-links-activate" onClick={() => setOfflineLicenseDialogOpen(true)}>
+              <p className="open-source-attribution">基于 OpenBidKit_Yibiao（原作者 mark / FB208）二次开发，遵循 AGPL-3.0-only；保留原项目著作权与许可声明。</p>
+              {licenseStatus && licenseStatus.activationMode !== 'internal_distribution' && <button type="button" className="about-links-activate" onClick={() => setOfflineLicenseDialogOpen(true)}>
                 离线激活授权
-              </button>
+              </button>}
             </article>
           </div>
           <div className="privacy-statement">
@@ -2691,18 +2674,23 @@ function SettingsPage({ onDeveloperModeChange, request, onRequestHandled, regist
             <div className="privacy-list">
               <article className="privacy-item">
                 <span>01</span>
-                <strong>你的业务数据不会被我收集</strong>
-                <p>应用不会上传、收集或保存你配置的 API Key、导入的招标文件、解析后的文档内容、生成的方案正文、导出文件或其他业务结果。</p>
+                <strong>配置和业务资料保存在本机</strong>
+                <p>API Key、导入资料、生成内容与工作区状态保存在本机的独立数据目录，供后续使用和导出。内部版不会自动把业务资料上传到原作者的失败诊断服务。</p>
               </article>
               <article className="privacy-item">
                 <span>02</span>
                 <strong>线上 AI 请求只发送给你配置的服务商</strong>
-                <p>当你使用 OpenAI 兼容接口、MinerU 或其他线上 API 时，应用会把完成任务所需的内容发送给你自行配置的服务商。这是实现文档解析、内容生成、模型测试等功能的必要步骤；这些请求不经过我的服务器，我也不会额外留存任何请求内容或生成结果。</p>
+                <p>当你使用 OpenAI 兼容接口、MinerU 或其他线上 API 时，应用会把完成任务所需的内容发送给你自行配置的服务商，用于文档解析、内容生成、模型测试等功能。请按公司要求选择服务商。</p>
               </article>
               <article className="privacy-item">
                 <span>03</span>
                 <strong>匿名埋点只用于了解功能使用情况</strong>
                 <p>为了判断开源项目是否有人使用、哪些功能更常用，应用会把匿名页面访问和功能使用次数上报到 Cloudflare。统计不包含文档内容、文件名、本地路径、API Key、用户输入、生成结果或任何可还原业务内容的信息。</p>
+              </article>
+              <article className="privacy-item">
+                <span>04</span>
+                <strong>失败诊断在本机留存、手动导出</strong>
+                <p>Agent 最终失败后会在本机生成凭据脱敏的诊断包，不自动上传。诊断包仍可能包含任务提示词、业务正文、工作区文件、本地路径和系统信息；请从“通用 → 失败诊断包”确认后导出给内部管理员。可通过存储空间清理本机诊断包。</p>
               </article>
             </div>
           </div>

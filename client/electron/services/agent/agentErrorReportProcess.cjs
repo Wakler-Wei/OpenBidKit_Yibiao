@@ -139,7 +139,7 @@ function createReportMeta(job, error, originalBytes, compressedBytes, configured
   };
 }
 
-// 独立进程完成完整诊断包构造、压缩和上传。
+// 独立进程完成诊断包构造和压缩；内部版只在本机留存，不发起预检或上传。
 async function runReport(job) {
   const configuredSecrets = [...collectConfiguredSecrets(job.config)].filter(Boolean).sort((left, right) => right.length - left.length);
   const error = job.error;
@@ -151,7 +151,7 @@ async function runReport(job) {
     client: {
       client_id: job.client.clientId,
       client_created_at: job.client.clientCreatedAt,
-      license_payload: sanitizeValue(job.license.payload, configuredSecrets),
+      license_payload: sanitizeValue(job.license?.payload || null, configuredSecrets),
     },
     system: {
       os: {
@@ -182,6 +182,19 @@ async function runReport(job) {
   };
   const source = Buffer.from(JSON.stringify(report), 'utf-8');
   const compressed = await gzipAsync(source, { level: 6 });
+  if (job.localReportDir) {
+    if (!compressed.length || compressed.length > job.maxCompressedBytes) throw new Error('诊断包超过大小限制');
+    await fs.promises.mkdir(job.localReportDir, { recursive: true });
+    const reportPath = path.join(job.localReportDir, `${job.occurredAt.replace(/[:.]/g, '-')}_${job.reportId}.json.gz`);
+    const temporaryPath = `${reportPath}.tmp`;
+    try {
+      await fs.promises.writeFile(temporaryPath, compressed);
+      await fs.promises.rename(temporaryPath, reportPath);
+    } finally {
+      await fs.promises.rm(temporaryPath, { force: true }).catch(() => undefined);
+    }
+    return reportPath;
+  }
   if (!compressed.length || compressed.length > job.maxCompressedBytes) return;
   const meta = createReportMeta(job, error, source.length, compressed.length, configuredSecrets);
   const controller = new AbortController();
@@ -204,8 +217,10 @@ async function runReport(job) {
   }
 }
 
-process.parentPort.once('message', (event) => {
-  void runReport(event.data)
-    .catch(() => undefined)
-    .finally(() => process.exit(0));
-});
+if (process.parentPort) {
+  process.parentPort.once('message', (event) => {
+    void runReport(event.data).then(() => process.exit(0), () => process.exit(1));
+  });
+}
+
+module.exports = { runReport };
